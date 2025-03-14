@@ -68,12 +68,61 @@ def start_auth_server(port=8000):
     return httpd
 
 
+# def auth_example():
+#     """授权认证示例"""
+#     # 创建客户端实例
+#     client = BaiduCloudClient(
+#         app_key="xxxx",
+#         secret_key="xxxx"
+#     )
+    
+#     # 启动授权回调服务器
+#     callback_port = 8000
+#     redirect_uri = f"http://localhost:{callback_port}/callback"
+#     httpd = start_auth_server(callback_port)
+    
+#     # 获取授权URL
+#     auth_url = client.get_auth_url(redirect_uri=redirect_uri)
+#     print(f"正在打开浏览器进行授权...")
+#     print(f"如果浏览器没有自动打开，请手动访问以下链接:\n{auth_url}")
+    
+#     # 自动打开浏览器
+#     webbrowser.open(auth_url)
+    
+#     # 等待授权码
+#     print("等待授权中...")
+#     while auth_code is None:
+#         time.sleep(1)
+    
+#     # 关闭服务器
+#     httpd.shutdown()
+    
+#     # 通过授权码获取access_token
+#     print(f"\n已获取授权码，正在获取access_token...")
+#     result = client.get_access_token(auth_code, redirect_uri=redirect_uri)
+#     print(f"授权结果: {result}")
+    
+#     # 获取用户信息
+#     user_info = client.get_user_info()
+#     print(f"用户信息: {user_info}")
+    
+#     # 获取空间配额信息
+#     quota_info = client.get_quota()
+#     print(f"空间配额信息: {quota_info}")
+    
+#     return client
+
+
 def auth_example():
     """授权认证示例"""
+    params = {}
+
     # 创建客户端实例
     client = BaiduCloudClient(
-        app_key="xxxx",
-        secret_key="xxxx"
+        # app_key="q8WE4EpCsau1oS0MplgMKNBn",
+        app_key= "Iv7m0AmGpdGcfpvrDwnme9WpvhtXzXUC",
+        secret_key="xxxx",
+        **params
     )
     
     # 启动授权回调服务器
@@ -81,26 +130,27 @@ def auth_example():
     redirect_uri = f"http://localhost:{callback_port}/callback"
     httpd = start_auth_server(callback_port)
     
+    redirect_uri = "oob"
     # 获取授权URL
     auth_url = client.get_auth_url(redirect_uri=redirect_uri)
     print(f"正在打开浏览器进行授权...")
     print(f"如果浏览器没有自动打开，请手动访问以下链接:\n{auth_url}")
     
-    # 自动打开浏览器
-    webbrowser.open(auth_url)
+    # # 自动打开浏览器
+    # webbrowser.open(auth_url)
     
-    # 等待授权码
-    print("等待授权中...")
-    while auth_code is None:
-        time.sleep(1)
+    # # 等待授权码
+    # print("等待授权中...")
+    # while auth_code is None:
+    #     time.sleep(1)
     
-    # 关闭服务器
-    httpd.shutdown()
+    # # 关闭服务器
+    # httpd.shutdown()
     
-    # 通过授权码获取access_token
-    print(f"\n已获取授权码，正在获取access_token...")
-    result = client.get_access_token(auth_code, redirect_uri=redirect_uri)
-    print(f"授权结果: {result}")
+    # # 通过授权码获取access_token
+    # print(f"\n已获取授权码，正在获取access_token...")
+    # result = client.get_access_token(auth_code, redirect_uri=redirect_uri)
+    # print(f"授权结果: {result}")
     
     # 获取用户信息
     user_info = client.get_user_info()
@@ -114,10 +164,18 @@ def auth_example():
 
 
 def file_management_example(client):
-    """文件管理示例"""
+    """文件管理示例
+    
+    演示如何使用BaiduCloudClient进行文件管理操作，包括：
+    - 列出文件
+    - 创建目录
+    - 搜索文件
+    - 重命名文件
+    - 删除文件
+    """
     # 列出根目录文件
     files = client.list_files("/")
-    print(f"根目录文件列表: {files}")
+    print(f"根目录文件列表: {str(files)[:200]}...")
     
     # 创建目录
     dir_name = f"/测试目录_{int(time.time())}"
@@ -126,7 +184,7 @@ def file_management_example(client):
     
     # 搜索文件
     search_result = client.search_files("测试")
-    print(f"搜索结果: {search_result}")
+    print(f"搜索结果: {str(search_result)[:200]}...")
     
     # 重命名目录
     new_dir_name = f"{dir_name}_renamed"
@@ -139,14 +197,18 @@ def file_management_example(client):
 
 
 def upload_download_example(client):
-    """上传下载示例"""
+    """上传下载示例
+    
+    演示如何使用BaiduCloudClient进行文件上传和下载操作
+    """
     # 创建测试文件
     local_file = "test_upload.txt"
     with open(local_file, "w", encoding="utf-8") as f:
-        f.write("这是一个测试文件，用于测试百度云盘上传功能。" * 100)
+        f.write("这是一个测试文件，用于测试百度云盘上传功能。" * 10)
     
     # 上传文件
     remote_path = "/test_upload.txt"
+    print("正在上传文件...")
     upload_result = client.upload_file(local_file, remote_path)
     print(f"上传结果: {upload_result}")
     
@@ -156,6 +218,7 @@ def upload_download_example(client):
     
     # 下载文件
     download_path = "test_download.txt"
+    print("正在下载文件...")
     download_success = client.download_file(remote_path, download_path)
     print(f"下载结果: {'成功' if download_success else '失败'}")
     
@@ -169,7 +232,10 @@ def upload_download_example(client):
 
 
 def share_example(client):
-    """分享示例"""
+    """分享示例
+    
+    演示如何使用BaiduCloudClient进行文件分享操作
+    """
     # 创建测试文件
     local_file = "test_share.txt"
     with open(local_file, "w", encoding="utf-8") as f:
@@ -180,6 +246,7 @@ def share_example(client):
     client.upload_file(local_file, remote_path)
     
     # 创建分享
+    print("创建分享链接...")
     share_result = client.create_share([remote_path], period=7, password="1234")
     print(f"分享结果: {share_result}")
     
@@ -189,6 +256,7 @@ def share_example(client):
     
     # 取消分享
     if "shareid" in share_result:
+        print("取消分享...")
         cancel_result = client.cancel_share([share_result["shareid"]])
         print(f"取消分享结果: {cancel_result}")
     
@@ -198,11 +266,17 @@ def share_example(client):
 
 
 def large_file_example(client):
-    """大文件上传示例"""
-    # 创建大文件（10MB）
+    """大文件上传示例
+    
+    演示如何使用BaiduCloudClient进行大文件上传和下载操作
+    """
+    # 创建大文件（5MB）
     large_file = "large_test_file.bin"
+    file_size = 5 * 1024 * 1024  # 5MB
+    
+    print(f"创建{file_size/1024/1024:.1f}MB测试文件...")
     with open(large_file, "wb") as f:
-        f.write(os.urandom(10 * 1024 * 1024))  # 10MB随机数据
+        f.write(os.urandom(file_size))  # 随机数据
     
     # 上传大文件（会自动使用分片上传）
     remote_path = "/large_test_file.bin"
@@ -233,22 +307,20 @@ def main():
     print("百度云盘工具类使用示例")
     print("-" * 50)
     
-    # 注意：实际使用时，应该保存access_token和refresh_token，避免频繁授权
-    # 这里为了演示完整流程，每次都重新授权
     try:
         # 授权示例
         client = auth_example()
         
         # 文件管理示例
-        file_management_example(client)
+        # file_management_example(client)
         
-        # 上传下载示例
-        upload_download_example(client)
+        # # 上传下载示例
+        # upload_download_example(client)
         
-        # 分享示例
-        share_example(client)
+        # # 分享示例
+        # share_example(client)
         
-        # 大文件示例
+        # # 大文件示例
         large_file_example(client)
         
         print("\n所有示例执行完毕!")

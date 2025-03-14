@@ -1,4 +1,8 @@
-"""百度云盘工具类模块
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+"""
+百度云盘工具类模块
 
 提供对百度云盘进行操作的工具类，封装了百度云盘SDK的常用功能，
 包括文件上传、下载、分享、移动、复制、删除等基本功能，
@@ -9,7 +13,7 @@ import os
 import time
 import json
 import hashlib
-from typing import Dict, List, Optional, Union, Callable, BinaryIO, Any, Tuple
+from typing import Dict, List, Optional, Union, Any, Tuple
 
 import requests
 
@@ -27,8 +31,12 @@ class BaiduCloudClient:
         token_expire_time (int): access_token的过期时间戳
     """
     
+    # API基础URL
+    BASE_URL = "https://pan.baidu.com/rest/2.0/xpan"
+    OPENAPI_URL = "https://openapi.baidu.com/oauth/2.0"
+    
     def __init__(self, app_key: str, secret_key: str, access_token: str = None, 
-                 refresh_token: str = None, auto_refresh: bool = True):
+                 refresh_token: str = None, expires_in: int = None, **kwargs):
         """初始化百度云盘客户端
         
         Args:
@@ -36,30 +44,23 @@ class BaiduCloudClient:
             secret_key: 百度云应用的Secret Key
             access_token: 用户授权访问令牌，可选
             refresh_token: 用于刷新access_token的令牌，可选
-            auto_refresh: 是否自动刷新token，默认为True
+            expires_in: token过期时间（秒），可选
         """
         self.app_key = app_key
         self.secret_key = secret_key
         self.access_token = access_token
         self.refresh_token = refresh_token
-        self.auto_refresh = auto_refresh
-        self.token_expire_time = 0
-        self._session = None
-    
-    def _get_session(self):
-        """获取HTTP会话，如果不存在则创建"""
-        if self._session is None:
-            self._session = requests.Session()
-        return self._session
+        self.token_expire_time = int(time.time()) + expires_in if expires_in else 0
+        self._session = requests.Session()
     
     def _check_token(self):
-        """检查token是否有效，如果无效且设置了自动刷新，则刷新token"""
+        """检查token是否有效，如果无效且有refresh_token，则刷新token"""
         if not self.access_token:
             raise ValueError("未设置access_token，请先获取授权")
         
-        # 如果token即将过期且设置了自动刷新，则刷新token
+        # 如果token即将过期且有refresh_token，则刷新token
         current_time = int(time.time())
-        if self.token_expire_time > 0 and current_time >= self.token_expire_time - 60 and self.auto_refresh:
+        if self.token_expire_time > 0 and current_time >= self.token_expire_time - 60 and self.refresh_token:
             self.refresh_access_token()
     
     def get_auth_url(self, redirect_uri: str, scope: str = "basic,netdisk") -> str:
@@ -79,7 +80,7 @@ class BaiduCloudClient:
             "scope": scope
         }
         query_string = "&".join([f"{k}={v}" for k, v in params.items()])
-        return f"https://openapi.baidu.com/oauth/2.0/authorize?{query_string}"
+        return f"{self.OPENAPI_URL}/authorize?{query_string}"
     
     def get_access_token(self, code: str, redirect_uri: str) -> Dict[str, Any]:
         """通过授权码获取访问令牌
@@ -91,7 +92,6 @@ class BaiduCloudClient:
         Returns:
             Dict: 包含access_token、refresh_token等信息的字典
         """
-        session = self._get_session()
         params = {
             "grant_type": "authorization_code",
             "code": code,
@@ -99,7 +99,7 @@ class BaiduCloudClient:
             "client_secret": self.secret_key,
             "redirect_uri": redirect_uri
         }
-        response = session.get("https://openapi.baidu.com/oauth/2.0/token", params=params)
+        response = self._session.get(f"{self.OPENAPI_URL}/token", params=params)
         result = response.json()
         
         if "access_token" in result:
@@ -120,14 +120,13 @@ class BaiduCloudClient:
         if not self.refresh_token:
             raise ValueError("未设置refresh_token，无法刷新token")
         
-        session = self._get_session()
         params = {
             "grant_type": "refresh_token",
             "refresh_token": self.refresh_token,
             "client_id": self.app_key,
             "client_secret": self.secret_key
         }
-        response = session.get("https://openapi.baidu.com/oauth/2.0/token", params=params)
+        response = self._session.get(f"{self.OPENAPI_URL}/token", params=params)
         result = response.json()
         
         if "access_token" in result:
@@ -147,9 +146,8 @@ class BaiduCloudClient:
             Dict: 用户信息字典
         """
         self._check_token()
-        session = self._get_session()
         params = {"access_token": self.access_token}
-        response = session.get("https://pan.baidu.com/rest/2.0/xpan/nas?method=uinfo", params=params)
+        response = self._session.get(f"{self.BASE_URL}/nas?method=uinfo", params=params)
         return response.json()
     
     def get_quota(self) -> Dict[str, Any]:
@@ -159,9 +157,8 @@ class BaiduCloudClient:
             Dict: 包含空间使用情况的字典
         """
         self._check_token()
-        session = self._get_session()
         params = {"access_token": self.access_token}
-        response = session.get("https://pan.baidu.com/api/quota", params=params)
+        response = self._session.get("https://pan.baidu.com/api/quota", params=params)
         return response.json()
     
     def list_files(self, dir_path: str = "/", order: str = "name", desc: bool = False, 
@@ -179,7 +176,6 @@ class BaiduCloudClient:
             Dict: 包含文件列表的字典
         """
         self._check_token()
-        session = self._get_session()
         params = {
             "access_token": self.access_token,
             "dir": dir_path,
@@ -188,7 +184,7 @@ class BaiduCloudClient:
             "start": start,
             "limit": limit
         }
-        response = session.get("https://pan.baidu.com/rest/2.0/xpan/file?method=list", params=params)
+        response = self._session.get(f"{self.BASE_URL}/file?method=list", params=params)
         return response.json()
     
     def search_files(self, keyword: str, dir_path: str = "/", recursive: bool = True) -> Dict[str, Any]:
@@ -203,14 +199,13 @@ class BaiduCloudClient:
             Dict: 包含搜索结果的字典
         """
         self._check_token()
-        session = self._get_session()
         params = {
             "access_token": self.access_token,
             "key": keyword,
             "dir": dir_path,
             "recursion": 1 if recursive else 0
         }
-        response = session.get("https://pan.baidu.com/rest/2.0/xpan/file?method=search", params=params)
+        response = self._session.get(f"{self.BASE_URL}/file?method=search", params=params)
         return response.json()
     
     def get_file_info(self, file_path: str) -> Dict[str, Any]:
@@ -223,12 +218,32 @@ class BaiduCloudClient:
             Dict: 文件信息字典
         """
         self._check_token()
-        session = self._get_session()
+        # 先获取文件的fsid
+        list_params = {
+            "access_token": self.access_token,
+            "dir": os.path.dirname(file_path),
+            "limit": 1000
+        }
+        list_response = self._session.get(f"{self.BASE_URL}/file?method=list", params=list_params)
+        list_result = list_response.json()
+        
+        # 查找文件的fsid
+        fsid = None
+        if "list" in list_result:
+            for file_info in list_result["list"]:
+                if file_info.get("path") == file_path:
+                    fsid = file_info.get("fs_id")
+                    break
+        
+        if not fsid:
+            return {"errno": 1, "errmsg": "File not found"}
+        
+        # 使用fsid获取文件信息
         params = {
             "access_token": self.access_token,
-            "path": file_path
+            "fsids": f"[{fsid}]"
         }
-        response = session.get("https://pan.baidu.com/rest/2.0/xpan/multimedia?method=filemetas", params=params)
+        response = self._session.get(f"{self.BASE_URL}/multimedia?method=filemetas", params=params)
         return response.json()
     
     def create_directory(self, dir_path: str) -> Dict[str, Any]:
@@ -241,10 +256,9 @@ class BaiduCloudClient:
             Dict: 创建结果字典
         """
         self._check_token()
-        session = self._get_session()
         params = {"access_token": self.access_token}
         data = {"path": dir_path}
-        response = session.post("https://pan.baidu.com/rest/2.0/xpan/file?method=create", 
+        response = self._session.post(f"{self.BASE_URL}/file?method=create", 
                                params=params, data=data)
         return response.json()
     
@@ -258,10 +272,9 @@ class BaiduCloudClient:
             Dict: 删除结果字典
         """
         self._check_token()
-        session = self._get_session()
         params = {"access_token": self.access_token}
         data = {"filelist": json.dumps(file_paths)}
-        response = session.post("https://pan.baidu.com/rest/2.0/xpan/file?method=filemanager&opera=delete", 
+        response = self._session.post(f"{self.BASE_URL}/file?method=filemanager&opera=delete", 
                                params=params, data=data)
         return response.json()
     
@@ -276,12 +289,11 @@ class BaiduCloudClient:
             Dict: 重命名结果字典
         """
         self._check_token()
-        session = self._get_session()
         params = {"access_token": self.access_token}
         data = {
             "filelist": json.dumps([{"path": file_path, "newname": new_name}])
         }
-        response = session.post("https://pan.baidu.com/rest/2.0/xpan/file?method=filemanager&opera=rename", 
+        response = self._session.post(f"{self.BASE_URL}/file?method=filemanager&opera=rename", 
                                params=params, data=data)
         return response.json()
     
@@ -289,16 +301,14 @@ class BaiduCloudClient:
         """移动文件或目录
         
         Args:
-            file_list: 文件移动列表，格式为[{"path":"源路径", "dest":"目标路径"},...]
-            
+            file_list: 文件移动列表，格式为[{"path":"源路径", "dest":"目标路径"},...]            
         Returns:
             Dict: 移动结果字典
         """
         self._check_token()
-        session = self._get_session()
         params = {"access_token": self.access_token}
         data = {"filelist": json.dumps(file_list)}
-        response = session.post("https://pan.baidu.com/rest/2.0/xpan/file?method=filemanager&opera=move", 
+        response = self._session.post(f"{self.BASE_URL}/file?method=filemanager&opera=move", 
                                params=params, data=data)
         return response.json()
     
@@ -312,10 +322,9 @@ class BaiduCloudClient:
             Dict: 复制结果字典
         """
         self._check_token()
-        session = self._get_session()
         params = {"access_token": self.access_token}
         data = {"filelist": json.dumps(file_list)}
-        response = session.post("https://pan.baidu.com/rest/2.0/xpan/file?method=filemanager&opera=copy", 
+        response = self._session.post(f"{self.BASE_URL}/file?method=filemanager&opera=copy", 
                                params=params, data=data)
         return response.json()
     
@@ -329,12 +338,11 @@ class BaiduCloudClient:
             str: 文件下载链接
         """
         self._check_token()
-        session = self._get_session()
         params = {
             "access_token": self.access_token,
             "path": file_path
         }
-        response = session.get("https://pan.baidu.com/rest/2.0/xpan/file?method=download", params=params)
+        response = self._session.get(f"{self.BASE_URL}/file?method=download", params=params)
         if response.status_code == 200:
             return response.json().get("dlink", "")
         return ""
@@ -350,14 +358,55 @@ class BaiduCloudClient:
         Returns:
             bool: 下载是否成功
         """
-        download_link = self.get_download_link(file_path)
-        if not download_link:
-            return False
-        
-        session = self._get_session()
+        self._check_token()
         try:
-            response = session.get(download_link, stream=True)
+            # 直接使用下载API获取下载链接
+            params = {
+                "access_token": self.access_token,
+                "path": file_path
+            }
+            response = self._session.get(f"{self.BASE_URL}/file?method=download", params=params)
             if response.status_code != 200:
+                print(f"下载请求失败，状态码: {response.status_code}")
+                return False
+            
+            # 解析响应获取下载链接
+            try:
+                # 检查响应内容是否为JSON格式
+                content_type = response.headers.get('Content-Type', '')
+                if 'application/json' in content_type:
+                    result = response.json()
+                    # 检查错误码
+                    if 'errno' in result and result['errno'] != 0:
+                        print(f"获取下载链接失败，错误码: {result['errno']}，错误信息: {result.get('errmsg', '')}")
+                        return False
+                    
+                    download_link = result.get("dlink", "")
+                    if not download_link:
+                        print(f"获取下载链接失败: {result}")
+                        return False
+                else:
+                    # 如果不是JSON格式，可能是直接返回了文件内容（这是正常情况）
+                    # 直接将响应内容写入文件
+                    try:
+                        # 确保目录存在
+                        os.makedirs(os.path.dirname(os.path.abspath(local_path)), exist_ok=True)
+                        
+                        # 直接写入文件
+                        with open(local_path, 'wb') as f:
+                            f.write(response.content)
+                        return True
+                    except Exception as e:
+                        print(f"写入文件失败: {e}")
+                        return False
+            except Exception as e:
+                print(f"解析下载链接失败: {e}")
+                return False
+            
+            # 使用下载链接获取文件内容
+            download_response = self._session.get(download_link, stream=True)
+            if download_response.status_code != 200:
+                print(f"下载请求失败，状态码: {download_response.status_code}")
                 return False
             
             # 确保目录存在
@@ -365,7 +414,7 @@ class BaiduCloudClient:
             
             # 分块下载文件
             with open(local_path, 'wb') as f:
-                for chunk in response.iter_content(chunk_size=chunk_size):
+                for chunk in download_response.iter_content(chunk_size=chunk_size):
                     if chunk:
                         f.write(chunk)
             return True
@@ -411,7 +460,6 @@ class BaiduCloudClient:
         Returns:
             Dict: 上传结果字典
         """
-        session = self._get_session()
         params = {
             "access_token": self.access_token,
             "path": remote_path,
@@ -420,8 +468,8 @@ class BaiduCloudClient:
         
         with open(local_path, 'rb') as f:
             files = {'file': f}
-            response = session.post(
-                "https://pan.baidu.com/rest/2.0/xpan/file?method=upload",
+            response = self._session.post(
+                f"{self.BASE_URL}/file?method=upload",
                 params=params,
                 files=files
             )
@@ -439,43 +487,61 @@ class BaiduCloudClient:
         Returns:
             Dict: 上传结果字典
         """
-        # 获取文件大小
-        file_size = os.path.getsize(local_path)
-        
-        # 计算文件MD5
-        md5 = self._calculate_file_md5(local_path)
-        
-        # 预创建文件
-        precreate_result = self._precreate_file(remote_path, file_size, md5, ondup)
-        if 'errno' in precreate_result and precreate_result['errno'] != 0:
-            return precreate_result
-        
-        # 获取上传ID
-        upload_id = precreate_result.get('uploadid', '')
-        if not upload_id:
-            return {"errno": -1, "errmsg": "获取上传ID失败"}
-        
-        # 分片上传
-        block_list = []
-        chunk_size = 4 * 1024 * 1024  # 4MB
-        with open(local_path, 'rb') as f:
-            block_index = 0
-            while True:
-                chunk = f.read(chunk_size)
-                if not chunk:
-                    break
-                
-                # 上传分片
-                result = self._upload_chunk(chunk, remote_path, upload_id, block_index)
-                if 'errno' in result and result['errno'] != 0:
-                    return result
-                
-                # 记录分片MD5
-                block_list.append(hashlib.md5(chunk).hexdigest())
-                block_index += 1
-        
-        # 创建文件
-        return self._create_file(remote_path, file_size, upload_id, block_list, ondup)
+        try:
+            # 获取文件大小
+            file_size = os.path.getsize(local_path)
+            
+            # 计算文件MD5
+            md5 = self._calculate_file_md5(local_path)
+            print(f"开始上传文件: {remote_path}, 大小: {file_size/1024/1024:.2f}MB")
+            
+            # 预创建文件
+            precreate_result = self._precreate_file(remote_path, file_size, md5, ondup)
+            if 'errno' in precreate_result and precreate_result['errno'] != 0:
+                print(f"预创建文件失败: {precreate_result}")
+                return precreate_result
+            
+            # 获取上传ID
+            upload_id = precreate_result.get('uploadid', '')
+            if not upload_id:
+                error_result = {"errno": -1, "errmsg": "获取上传ID失败"}
+                print(f"获取上传ID失败: {precreate_result}")
+                return error_result
+            
+            # 分片上传
+            block_list = []
+            chunk_size = 4 * 1024 * 1024  # 4MB
+            with open(local_path, 'rb') as f:
+                block_index = 0
+                while True:
+                    chunk = f.read(chunk_size)
+                    if not chunk:
+                        break
+                    
+                    # 上传分片
+                    print(f"上传分片 {block_index+1}...")
+                    result = self._upload_chunk(chunk, remote_path, upload_id, block_index)
+                    if 'errno' in result and result['errno'] != 0:
+                        print(f"上传分片 {block_index+1} 失败: {result}")
+                        return result
+                    
+                    # 记录分片MD5
+                    block_list.append(hashlib.md5(chunk).hexdigest())
+                    block_index += 1
+            
+            # 创建文件
+            print(f"完成分片上传，创建文件...")
+            create_result = self._create_file(remote_path, file_size, upload_id, block_list, ondup)
+            if 'errno' in create_result and create_result['errno'] != 0:
+                print(f"创建文件失败: {create_result}")
+            else:
+                print(f"文件上传成功: {remote_path}")
+            
+            return create_result
+        except Exception as e:
+            error_result = {"errno": -1, "errmsg": f"上传文件异常: {str(e)}"}
+            print(f"上传文件异常: {e}")
+            return error_result
     
     def _calculate_file_md5(self, file_path: str) -> str:
         """计算文件MD5值
@@ -504,7 +570,13 @@ class BaiduCloudClient:
         Returns:
             Dict: 预创建结果字典
         """
-        session = self._get_session()
+        # 计算分片数量和分片大小
+        chunk_size = 4 * 1024 * 1024  # 4MB
+        block_count = (file_size + chunk_size - 1) // chunk_size
+        
+        # 预计算分片MD5列表（空列表，实际上传时会计算）
+        block_list = ["" for _ in range(block_count)]
+        
         params = {"access_token": self.access_token}
         data = {
             "path": remote_path,
@@ -512,17 +584,21 @@ class BaiduCloudClient:
             "isdir": 0,
             "autoinit": 1,
             "rtype": 3,  # 上传类型，3表示上传文件
-            "block_list": json.dumps([]),  # 预创建时为空
+            "block_list": json.dumps(block_list),  # 提供预计算的分片列表
             "ondup": ondup
         }
         
-        response = session.post(
-            "https://pan.baidu.com/rest/2.0/xpan/file?method=precreate",
+        response = self._session.post(
+            f"{self.BASE_URL}/file?method=precreate",
             params=params,
             data=data
         )
         
-        return response.json()
+        result = response.json()
+        if 'errno' in result and result['errno'] != 0:
+            print(f"预创建文件失败，错误码: {result['errno']}，错误信息: {result.get('errmsg', '')}")
+        
+        return result
     
     def _upload_chunk(self, chunk: bytes, remote_path: str, upload_id: str, block_index: int) -> Dict[str, Any]:
         """上传文件分片
@@ -536,7 +612,6 @@ class BaiduCloudClient:
         Returns:
             Dict: 上传分片结果字典
         """
-        session = self._get_session()
         params = {
             "access_token": self.access_token,
             "path": remote_path,
@@ -545,8 +620,8 @@ class BaiduCloudClient:
         }
         
         files = {'file': chunk}
-        response = session.post(
-            "https://pan.baidu.com/rest/2.0/xpan/file?method=upload",
+        response = self._session.post(
+            f"{self.BASE_URL}/file?method=upload",
             params=params,
             files=files
         )
@@ -567,7 +642,6 @@ class BaiduCloudClient:
         Returns:
             Dict: 创建文件结果字典
         """
-        session = self._get_session()
         params = {"access_token": self.access_token}
         data = {
             "path": remote_path,
@@ -575,11 +649,12 @@ class BaiduCloudClient:
             "isdir": 0,
             "uploadid": upload_id,
             "block_list": json.dumps(block_list),
+            "rtype": 1,  # 修改上传类型，1表示普通文件，3可能是特殊类型
             "ondup": ondup
         }
         
-        response = session.post(
-            "https://pan.baidu.com/rest/2.0/xpan/file?method=create",
+        response = self._session.post(
+            f"{self.BASE_URL}/file?method=create",
             params=params,
             data=data
         )
@@ -600,7 +675,6 @@ class BaiduCloudClient:
             Dict: 分享结果字典
         """
         self._check_token()
-        session = self._get_session()
         params = {"access_token": self.access_token}
         
         data = {
@@ -615,8 +689,8 @@ class BaiduCloudClient:
         if password:
             data["pwd"] = password
         
-        response = session.post(
-            "https://pan.baidu.com/rest/2.0/xpan/share?method=set",
+        response = self._session.post(
+            f"{self.BASE_URL}/share?method=set",
             params=params,
             data=data
         )
@@ -634,15 +708,14 @@ class BaiduCloudClient:
             Dict: 包含分享列表的字典
         """
         self._check_token()
-        session = self._get_session()
         params = {
             "access_token": self.access_token,
             "start": start,
             "limit": limit
         }
         
-        response = session.get(
-            "https://pan.baidu.com/rest/2.0/xpan/share?method=list",
+        response = self._session.get(
+            f"{self.BASE_URL}/share?method=list",
             params=params
         )
         
@@ -658,12 +731,11 @@ class BaiduCloudClient:
             Dict: 取消分享结果字典
         """
         self._check_token()
-        session = self._get_session()
         params = {"access_token": self.access_token}
         data = {"shareid_list": json.dumps(share_ids)}
         
-        response = session.post(
-            "https://pan.baidu.com/rest/2.0/xpan/share?method=cancel",
+        response = self._session.post(
+            f"{self.BASE_URL}/share?method=cancel",
             params=params,
             data=data
         )
