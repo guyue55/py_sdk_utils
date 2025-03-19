@@ -314,8 +314,8 @@ def main():
         # 文件管理示例
         # file_management_example(client)
         
-        # # 上传下载示例
-        # upload_download_example(client)
+        # 上传下载示例
+        upload_download_example(client)
         
         # # 分享示例
         # share_example(client)
