@@ -5,14 +5,16 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="sdk_utils",
-    version="0.1.0",
+    version="0.1.2",
     author="Guyue",
     author_email="guyuecw@qq.com",
-    description="一个用于SDK开发的工具库，提供百度云盘API集成",
+    description="一个集成SDK的工具库，如百度云盘API",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/guyue55/sdk_utils",
     packages=find_packages(),
+    license="MIT",
+    license_files="LICENSE",
     install_requires=[
         "requests>=2.25.0",
         "bypy>=1.7.0",

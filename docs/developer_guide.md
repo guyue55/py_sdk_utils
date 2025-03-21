@@ -101,10 +101,12 @@ python -m twine check dist/*
 python -m twine upload dist/*
 ```
 
-
+**更多**
+- **清理旧的构建文件**: `python setup.py clean --all`
+- **清理旧dist**: `rm -rf dist/*`
 **注意事项**
 
-- **API token**：上传到**PyPI**需要API token，没有的话先去网站注册账号再生成API token（ https://pypi.org/）
+- **API token**：上传到**PyPI**需要API token，没有的话先去网站注册账号再生成API token（https://pypi.org/）
 - **避免每次都要输入token**：设置$HOME/.pypirc
     ```
     [pypi]
