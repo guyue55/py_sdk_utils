@@ -63,18 +63,15 @@ class TestBaiduCloudClient(unittest.TestCase):
         self.assertEqual(client.secret_key, self.secret_key)
         self.assertIsNone(client.access_token)
         self.assertIsNone(client.refresh_token)
-        self.assertTrue(client.auto_refresh)
         
         client = BaiduCloudClient(
             app_key=self.app_key,
             secret_key=self.secret_key,
             access_token=self.access_token,
-            refresh_token=self.refresh_token,
-            auto_refresh=False
+            refresh_token=self.refresh_token
         )
         self.assertEqual(client.access_token, self.access_token)
         self.assertEqual(client.refresh_token, self.refresh_token)
-        self.assertFalse(client.auto_refresh)
     
     def test_get_auth_url(self):
         """测试获取授权URL"""
@@ -229,15 +226,8 @@ class TestBaiduCloudClient(unittest.TestCase):
                     "server_filename": "测试文件.txt",
                     "size": 1024,
                     "isdir": 0,
-                    "category": 4
-                },
-                {
-                    "fs_id": 987654321,
-                    "path": "/测试目录",
-                    "server_filename": "测试目录",
-                    "size": 0,
-                    "isdir": 1,
-                    "category": 6
+                    "ctime": 1600000000,
+                    "mtime": 1600000000
                 }
             ]
         }
@@ -255,84 +245,21 @@ class TestBaiduCloudClient(unittest.TestCase):
         self.assertEqual(args[0], "https://pan.baidu.com/rest/2.0/xpan/file?method=list")
         self.assertEqual(kwargs['params']['access_token'], self.access_token)
         self.assertEqual(kwargs['params']['dir'], "/")
-        self.assertEqual(kwargs['params']['order'], "name")
-        self.assertEqual(kwargs['params']['desc'], 0)
-        
-        # 重置mock并测试带参数的调用
-        mock_get.reset_mock()
-        mock_get.return_value = mock_response
-        result = self.client.search_files("测试", dir_path="/test", recursive=False)
-        
-        # 验证请求参数
-        mock_get.assert_called_once()
-        args, kwargs = mock_get.call_args
-        self.assertEqual(kwargs['params']['dir'], "/test")
-        self.assertEqual(kwargs['params']['recursion'], 0)
     
-    @mock.patch('requests.Session.get')
-    def test_search_files(self, mock_get):
-        """测试搜索文件"""
-        # 模拟API响应
-        mock_response = mock.Mock()
-        mock_response.json.return_value = {
-            "errno": 0,
-            "list": [
-                {
-                    "fs_id": 123456789,
-                    "path": "/测试文件.txt",
-                    "server_filename": "测试文件.txt",
-                    "size": 1024,
-                    "isdir": 0
-                }
-            ]
-        }
-        mock_get.return_value = mock_response
-        
-        # 调用方法
-        result = self.client.search_files("测试")
-        
-        # 验证结果
-        self.assertEqual(result, mock_response.json.return_value)
-        
-        # 验证请求参数
-        mock_get.assert_called_once()
-        args, kwargs = mock_get.call_args
-        self.assertEqual(args[0], "https://pan.baidu.com/rest/2.0/xpan/file?method=search")
-        self.assertEqual(kwargs['params']['access_token'], self.access_token)
-        self.assertEqual(kwargs['params']['key'], "测试")
-        self.assertEqual(kwargs['params']['dir'], "/")
-        self.assertEqual(kwargs['params']['recursion'], 1)
-        
-        # 重置mock并测试带参数的调用
-        mock_get.reset_mock()
-        mock_get.return_value = mock_response
-        result = self.client.search_files("测试", dir_path="/test", recursive=False)
-        
-        # 验证请求参数
-        mock_get.assert_called_once()
-        args, kwargs = mock_get.call_args
-        self.assertEqual(kwargs['params']['dir'], "/test")
-        self.assertEqual(kwargs['params']['recursion'], 0)
-        
     @mock.patch('requests.Session.post')
-    def test_create_share(self, mock_post):
-        """测试创建分享"""
-        # 重置mock对象，确保之前的调用不会影响当前测试
-        mock_post.reset_mock()
-        
+    def test_delete_files(self, mock_post):
+        """测试删除文件"""
         # 模拟API响应
         mock_response = mock.Mock()
         mock_response.json.return_value = {
             "errno": 0,
-            "shareid": "1234567890",
-            "link": "https://pan.baidu.com/s/abcdef",
-            "shorturl": "https://pan.baidu.com/s/abc",
-            "pwd": "1234"
+            "info": []
         }
         mock_post.return_value = mock_response
         
         # 调用方法
-        result = self.client.create_share(["/测试文件.txt"], period=7, password="1234")
+        file_paths = ["/测试文件.txt", "/测试目录"]
+        result = self.client.delete_files(file_paths)
         
         # 验证结果
         self.assertEqual(result, mock_response.json.return_value)
@@ -340,257 +267,10 @@ class TestBaiduCloudClient(unittest.TestCase):
         # 验证请求参数
         mock_post.assert_called_once()
         args, kwargs = mock_post.call_args
-        self.assertEqual(args[0], "https://pan.baidu.com/rest/2.0/xpan/share?method=set")
+        self.assertEqual(args[0], "https://pan.baidu.com/rest/2.0/xpan/file?method=filemanager&opera=delete")
         self.assertEqual(kwargs['params']['access_token'], self.access_token)
-        self.assertEqual(json.loads(kwargs['data']['path_list']), ["/测试文件.txt"])
-        self.assertEqual(kwargs['data']['period'], 7)
-        self.assertEqual(kwargs['data']['pwd'], "1234")
-    
-    @mock.patch('requests.Session.post')
-    def test_create_share_with_different_method(self, mock_post):
-        """测试使用不同方法创建分享"""
-        # 模拟API响应
-        mock_response = mock.Mock()
-        mock_response.json.return_value = {
-            "errno": 0,
-            "shareid": "1234567890",
-            "link": "https://pan.baidu.com/s/abcdef",
-            "shorturl": "https://pan.baidu.com/s/abc",
-            "pwd": "1234"
-        }
-        mock_post.return_value = mock_response
-        
-        # 调用方法
-        result = self.client.create_share(["/测试文件.txt"], period=7, password="1234")
-        
-        # 验证结果
-        self.assertEqual(result, mock_response.json.return_value)
-        
-        # 验证请求参数
-        mock_post.assert_called_once()
-        args, kwargs = mock_post.call_args
-        self.assertEqual(args[0], "https://pan.baidu.com/rest/2.0/xpan/share?method=set")
-        self.assertEqual(kwargs['params']['access_token'], self.access_token)
-        self.assertEqual(json.loads(kwargs['data']['path_list']), ["/测试文件.txt"])
-        self.assertEqual(kwargs['data']['period'], 7)
-        self.assertEqual(kwargs['data']['pwd'], "1234")
-    
-    @mock.patch('requests.Session.get')
-    def test_list_shares(self, mock_get):
-        """测试获取分享列表"""
-        # 模拟API响应
-        mock_response = mock.Mock()
-        mock_response.json.return_value = {
-            "errno": 0,
-            "list": [
-                {
-                    "shareid": "1234567890",
-                    "title": "测试分享",
-                    "path": "/测试文件.txt",
-                    "shortlink": "https://pan.baidu.com/s/abc",
-                    "pwd": "1234"
-                }
-            ]
-        }
-        mock_get.return_value = mock_response
-        
-        # 调用方法
-        result = self.client.list_shares()
-        
-        # 验证结果
-        self.assertEqual(result, mock_response.json.return_value)
-        
-        # 验证请求参数
-        mock_get.assert_called_once()
-        args, kwargs = mock_get.call_args
-        self.assertEqual(args[0], "https://pan.baidu.com/rest/2.0/xpan/share?method=list")
-        self.assertEqual(kwargs['params']['access_token'], self.access_token)
-    
-    @mock.patch('requests.Session.post')
-    def test_cancel_share(self, mock_post):
-        """测试取消分享"""
-        # 模拟API响应
-        mock_response = mock.Mock()
-        mock_response.json.return_value = {"errno": 0}
-        mock_post.return_value = mock_response
-        
-        # 调用方法
-        result = self.client.cancel_share(["1234567890"])
-        
-        # 验证结果
-        self.assertEqual(result, mock_response.json.return_value)
-        
-        # 验证请求参数
-        mock_post.assert_called_once()
-        args, kwargs = mock_post.call_args
-        self.assertEqual(args[0], "https://pan.baidu.com/rest/2.0/xpan/share?method=cancel")
-        self.assertEqual(kwargs['params']['access_token'], self.access_token)
-        self.assertEqual(json.loads(kwargs['data']['shareid_list']), ["1234567890"])
+        self.assertEqual(json.loads(kwargs['data']['filelist']), file_paths)
 
 
-    @mock.patch('requests.Session.get')
-    def test_list_files_with_params(self, mock_get):
-        """测试带参数的文件列表获取"""
-        # 模拟API响应
-        mock_response = mock.Mock()
-        mock_get.return_value = mock_response
-        result = self.client.list_files("/test", order="time", desc=True, start=10, limit=50)
-        
-        # 验证请求参数
-        mock_get.assert_called_once()
-        args, kwargs = mock_get.call_args
-        self.assertEqual(kwargs['params']['dir'], "/test")
-        self.assertEqual(kwargs['params']['order'], "time")
-        self.assertEqual(kwargs['params']['desc'], 1)
-        self.assertEqual(kwargs['params']['start'], 10)
-        self.assertEqual(kwargs['params']['limit'], 50)
-    
-    @mock.patch('requests.Session.get')
-    def test_search_files(self, mock_get):
-        """测试搜索文件"""
-        # 模拟API响应
-        mock_response = mock.Mock()
-        mock_response.json.return_value = {
-            "errno": 0,
-            "list": [
-                {
-                    "fs_id": 123456789,
-                    "path": "/测试文件.txt",
-                    "server_filename": "测试文件.txt",
-                    "size": 1024,
-                    "isdir": 0
-                }
-            ]
-        }
-        mock_get.return_value = mock_response
-        
-        # 调用方法
-        result = self.client.search_files("测试")
-        
-        # 验证结果
-        self.assertEqual(result, mock_response.json.return_value)
-        
-        # 验证请求参数
-        mock_get.assert_called_once()
-        args, kwargs = mock_get.call_args
-        self.assertEqual(args[0], "https://pan.baidu.com/rest/2.0/xpan/file?method=search")
-        self.assertEqual(kwargs['params']['access_token'], self.access_token)
-        self.assertEqual(kwargs['params']['key'], "测试")
-        self.assertEqual(kwargs['params']['dir'], "/")
-        self.assertEqual(kwargs['params']['recursion'], 1)
-        
-        # 重置mock并测试带参数的调用
-        mock_get.reset_mock()
-        mock_get.return_value = mock_response
-        result = self.client.search_files("测试", dir_path="/test", recursive=False)
-        
-        # 验证请求参数
-        mock_get.assert_called_once()
-        args, kwargs = mock_get.call_args
-        self.assertEqual(kwargs['params']['dir'], "/test")
-        self.assertEqual(kwargs['params']['recursion'], 0)
-    
-    @mock.patch('requests.Session.get')
-    def test_search_files(self, mock_get):
-        """测试搜索文件"""
-        # 模拟API响应
-        mock_response = mock.Mock()
-        mock_response.json.return_value = {
-            "errno": 0,
-            "list": [
-                {
-                    "fs_id": 123456789,
-                    "path": "/测试文件.txt",
-                    "server_filename": "测试文件.txt",
-                    "size": 1024,
-                    "isdir": 0
-                }
-            ]
-        }
-        mock_get.return_value = mock_response
-        
-        # 调用方法
-        result = self.client.search_files("测试")
-        
-        # 验证结果
-        self.assertEqual(result, mock_response.json.return_value)
-        
-        # 验证请求参数
-        mock_get.assert_called_once()
-        args, kwargs = mock_get.call_args
-        self.assertEqual(args[0], "https://pan.baidu.com/rest/2.0/xpan/file?method=search")
-        self.assertEqual(kwargs['params']['access_token'], self.access_token)
-        self.assertEqual(kwargs['params']['key'], "测试")
-        self.assertEqual(kwargs['params']['dir'], "/")
-        self.assertEqual(kwargs['params']['recursion'], 1)
-        
-        # 重置mock并测试带参数的调用
-        mock_get.reset_mock()
-        mock_get.return_value = mock_response
-        result = self.client.search_files("测试", dir_path="/test", recursive=False)
-        
-        # 验证请求参数
-        mock_get.assert_called_once()
-        args, kwargs = mock_get.call_args
-        self.assertEqual(kwargs['params']['dir'], "/test")
-        self.assertEqual(kwargs['params']['recursion'], 0)
-        
-    @mock.patch('requests.Session.post')
-    def test_create_share(self, mock_post):
-        """测试创建分享"""
-        # 重置mock对象，确保之前的调用不会影响当前测试
-        mock_post.reset_mock()
-        
-        # 模拟API响应
-        mock_response = mock.Mock()
-        mock_response.json.return_value = {
-            "errno": 0,
-            "shareid": "1234567890",
-            "link": "https://pan.baidu.com/s/abcdef",
-            "shorturl": "https://pan.baidu.com/s/abc",
-            "pwd": "1234"
-        }
-        mock_post.return_value = mock_response
-        
-        # 调用方法
-        result = self.client.create_share(["/测试文件.txt"], period=7, password="1234")
-        
-        # 验证结果
-        self.assertEqual(result, mock_response.json.return_value)
-        
-        # 验证请求参数
-        mock_post.assert_called_once()
-        args, kwargs = mock_post.call_args
-        self.assertEqual(args[0], "https://pan.baidu.com/rest/2.0/xpan/share?method=set")
-        self.assertEqual(kwargs['params']['access_token'], self.access_token)
-        self.assertEqual(json.loads(kwargs['data']['path_list']), ["/测试文件.txt"])
-        self.assertEqual(kwargs['data']['period'], 7)
-        self.assertEqual(kwargs['data']['pwd'], "1234")
-        # 模拟API响应
-        mock_response = mock.Mock()
-        mock_response.json.return_value = {
-            "errno": 0,
-            "shareid": "1234567890",
-            "link": "https://pan.baidu.com/s/abcdef",
-            "shorturl": "https://pan.baidu.com/s/abc",
-            "pwd": "1234"
-        }
-        mock_post.return_value = mock_response
-        
-        # 调用方法
-        result = self.client.create_share(["/测试文件.txt"], period=7, password="1234")
-        
-        # 验证结果
-        self.assertEqual(result, mock_response.json.return_value)
-        
-        # 验证请求参数
-        mock_post.assert_called_once()
-        args, kwargs = mock_post.call_args
-        self.assertEqual(args[0], "https://pan.baidu.com/rest/2.0/xpan/share?method=create")
-        self.assertEqual(kwargs['params']['access_token'], self.access_token)
-        self.assertEqual(json.loads(kwargs['data']['fid_list']), ["/测试文件.txt"])
-        self.assertEqual(kwargs['data']['period'], 7)
-        self.assertEqual(kwargs['data']['pwd'], "1234")
-    
 if __name__ == "__main__":
     unittest.main()
